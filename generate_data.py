@@ -43,21 +43,27 @@ def build_database():
         results = data['results']['bindings']
         
         mapping = {}
+        # Shortened prefixes for efficiency (2-4 characters)
+        prefix_map = {
+            'imdb': 'im',
+            'rt': 'rt',
+            'metacritic': 'mc',
+            'letterboxd': 'lb',
+            'tmdb': 'tm',
+            'wiki_slug': 'wiki'
+        }
 
         for row in results:
             kanopy_id = row['kanopy']['value']
             
-            # These are all properties we want to use as keys
-            properties = ['imdb', 'rt', 'metacritic', 'letterboxd', 'tmdb', 'wiki_slug']
-            
-            for prop in properties:
+            for prop, prefix in prefix_map.items():
                 if prop in row:
                     raw_val = row[prop]['value']
                     # Decode URL characters (crucial for Wiki slugs and RT IDs)
                     clean_val = urllib.parse.unquote(raw_val)
                     
                     # Create a complex key to prevent clashes (e.g., "rt:m/19154")
-                    complex_key = f"{prop}:{clean_val}"
+                    complex_key = f"{prefix}:{clean_val}"
                     
                     # We map the external ID to the Kanopy ID
                     mapping[complex_key] = kanopy_id
