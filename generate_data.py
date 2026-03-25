@@ -37,11 +37,52 @@ def build_database():
     
     print("📡 Pulling global movie IDs from Wikidata...")
     try:
-        response = requests.get(WIKIDATA_URL, params={'query': QUERY, 'format': 'json'}, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        results = data['results']['bindings']
-        
+        max_attempts = 5
+        delay = 2
+        data = None
+
+        for attempt in range(1, max_attempts + 1):
+            response = requests.get(
+                WIKIDATA_URL,
+                params={'query': QUERY, 'format': 'json'},
+                headers=headers,
+                timeout=30,
+            )
+            response.raise_for_status()
+
+            try:
+                data = response.json()
+                break
+            except json.JSONDecodeError as e:
+                snippet = response.text[max(0, e.pos - 120):e.pos + 120]
+                print(f"⚠️ JSON decode error on attempt {attempt}/{max_attempts}: {e}")
+                print(f"Snippet near error: {snippet!r}")
+
+                # If this is the last attempt, allow fallback to partial data handling.
+                if attempt == max_attempts:
+                    print("⚠️ Max attempts reached, trying fallback parsing strategy.")
+                    try:
+                        # Try to recover from truncated output by fixing close braces.
+                        raw_text = response.text
+                        recovered = raw_text.rstrip()
+                        if not recovered.endswith('}'):  # path if truncated end
+                            recovered = recovered + '}}'
+                        data = json.loads(recovered)
+                        print("✅ Fallback parse succeeded after appending braces.")
+                        break
+                    except Exception:
+                        print("⚠️ Fallback parse failed; using empty results.")
+                        data = {'results': {'bindings': []}}
+                        break
+
+                print(f"⏳ Retrying after {delay}s...")
+                time.sleep(delay)
+                delay *= 2
+
+        if data is None:
+            raise RuntimeError("Failed to parse Wikidata response after retries")
+
+        results = data.get('results', {}).get('bindings', [])
         mapping = {}
         # Shortened prefixes for efficiency (2-4 characters)
         prefix_map = {
